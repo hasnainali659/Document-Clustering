@@ -13,6 +13,7 @@ from langchain.prompts import PromptTemplate
 import numpy as np
 import os
 import pandas as pd
+import ast
 
 class BookSummarizer:
     def __init__(self, pdf_path, num_clusters=10):
@@ -131,30 +132,42 @@ def process_single_file(file_path):
     
 if __name__ == "__main__":
     
-    filename = "docs_copy/EN-SCI-271-06.pdf"
+    filename = "docs_copy/ros.pdf"
     data = "books.csv"
     number_of_clusters = 3
+    reduced_data_tsne = None
+    kmeans = None
 
     if not os.path.exists(data):
         columns = ['vector', 'x', 'y', 'book_name', 'page_number', 'summary', 'labels']
         df = pd.DataFrame(columns=columns)
         df.to_csv(data, index=False)
     
+    df = pd.read_csv(data)
     file_data = process_single_file(filename)
+
     vector = file_data['vector']
     book_name = file_data['book_name']
     page_number = file_data['page_number']
     summary = file_data['summary']
-        
+
+    new_row = {'vector': vector, 'book_name': book_name,
+               'page_number': page_number, 'summary': summary,
+               }
+    
+    df = df.append(new_row, ignore_index=True)
+    df.to_csv(data, index=False)
+
     df = pd.read_csv(data)
     
-    if len(df) > 0:
-        all_books_vectors = df['vector']
+    if len(df) > 1:
+        df['vector'] = df['vector'].apply(ast.literal_eval)
+        all_books_vectors = np.array(df['vector'].tolist())
         
     else:
         all_books_vectors = vector
     
-    if len(df) > number_of_clusters:
+    if len(df) > 5:
         
         kmeans = KMeans(n_clusters=number_of_clusters, random_state=42).fit(all_books_vectors)
         closest_indices = []
@@ -163,60 +176,18 @@ if __name__ == "__main__":
             distances = np.linalg.norm(all_books_vectors - kmeans.cluster_centers_[i], axis=1)
             closest_index = np.argmin(distances)
             closest_indices.append(closest_index)
-    
-    if len([all_books_vectors]) > 6:   
+       
         tsne = TSNE(n_components=2, random_state=42,perplexity=5)
         reduced_data_tsne = tsne.fit_transform(np.array(all_books_vectors))
+        
+    
+    if reduced_data_tsne is not None:
         x = reduced_data_tsne[:, 0]
         y = reduced_data_tsne[:, 1]
-        
-    else:
-        x = None
-        y = None
-    
-    new_row = {'vector': vector, 'book_name': book_name,
-               'page_number': page_number, 'summary': summary,
-               'x': x, 'y': y, 'labels': kmeans.labels_}
-    
-    df.to_csv(data, index=False)
-            
-    
-    
-    
-    
-    
-    
-    
-    
-        
-    # all_books_vectors = []
-    # all_books_dict = {}
-    # all_book_page_no = []
-    # all_book_name = []
-    # all_book_summary = []
-    # number_of_clusters = 3
-    
-    # for book in os.listdir("docs_copy"):
-    #     summarizer = BookSummarizer(pdf_path=f"docs_copy/{book}", num_clusters=3)
-    #     output = summarizer.run_pipeline()
-    #     vector = summarizer.summary_embeddings(output)[0]
-    #     all_books_dict[book] = vector
-    #     all_books_vectors.append(vector)
-    #     all_book_page_no.append(summarizer.book_page_number)
-    #     all_book_name.append(book)
-    #     all_book_summary.append(output)
-        
-    # kmeans = KMeans(n_clusters=number_of_clusters, random_state=42).fit(all_books_vectors)
-    # closest_indices = []
+        labels = kmeans.labels_
 
-    # for i in range(number_of_clusters):
-    #     distances = np.linalg.norm(all_books_vectors - kmeans.cluster_centers_[i], axis=1)
-    #     closest_index = np.argmin(distances)
-    #     closest_indices.append(closest_index)
-        
-    # tsne = TSNE(n_components=2, random_state=42, perplexity=5)
-    # reduced_data_tsne = tsne.fit_transform(np.array(all_books_vectors))
-    # reduced_data_tsne_with_page = np.column_stack((reduced_data_tsne, all_book_page_no, all_book_name, all_book_summary, kmeans.labels_))
-    # column_names = ['x', 'y', 'page_number', 'book_name', 'summary','labels']
-    # df = pd.DataFrame(reduced_data_tsne_with_page, columns=column_names)
-    # df.to_csv('books.csv', index=False)
+        df['x'] = x
+        df['y'] = y
+        df['labels'] = labels
+
+    df.to_csv(data, index=False)

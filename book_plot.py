@@ -1,5 +1,6 @@
 import plotly.express as px
 import pandas as pd
+import plotly
 
 # Load the CSV file into a Pandas DataFrame
 df = pd.read_csv('books.csv')
@@ -10,4 +11,5 @@ fig = px.scatter(df, x='x', y='y', color='labels', size='page_number', hover_dat
                  title='Bubble Chart of Books')
 
 # Show the plot
-fig.show()
+# fig.show()
+plotly.offline.plot(fig)
