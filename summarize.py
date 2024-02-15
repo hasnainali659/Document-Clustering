@@ -2,6 +2,7 @@ from langchain_community.document_loaders import PyPDFLoader
 from langchain.schema import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from langchain.prompts import ChatPromptTemplate
 from langchain.chains.summarize import load_summarize_chain
 from sklearn.cluster import KMeans
 from sklearn.manifold import TSNE
@@ -118,16 +119,36 @@ class BookSummarizer:
         
         return output
     
+    def document_classification(self, summary):
+        
+        template =''''
+        You are given the {summary} of a book. Your task is to classify the book into one of the following genres:
+        [report, letter, handbook, specification document, poem, journal, science book, course outline].
+
+        If it is not present in the array suggest any relevant genre.
+
+        GENRE:
+        '''
+
+        prompt = ChatPromptTemplate.from_template(template)
+        llm = ChatOpenAI(temperature=0, model_name='gpt-4')
+
+        chain = prompt | llm
+        doc_class = chain.invoke({'summary': summary})
+        return doc_class.content
+    
 def process_single_file(file_path):
     summarizer = BookSummarizer(pdf_path=file_path, num_clusters=3)
     output = summarizer.run_pipeline()
     vector = summarizer.summary_embeddings(output)[0]
+    doc_class = summarizer.document_classification(output)
 
     return {
         'book_name': os.path.basename(file_path),
         'vector': vector,
         'page_number': summarizer.book_page_number,
         'summary': output,
+        'doc_class': doc_class
     }
     
 if __name__ == "__main__":
@@ -139,7 +160,7 @@ if __name__ == "__main__":
     kmeans = None
 
     if not os.path.exists(data):
-        columns = ['vector', 'x', 'y', 'book_name', 'page_number', 'summary', 'labels']
+        columns = ['vector', 'x', 'y', 'book_name', 'page_number', 'summary', 'labels', 'doc_class']
         df = pd.DataFrame(columns=columns)
         df.to_csv(data, index=False)
     
@@ -150,9 +171,11 @@ if __name__ == "__main__":
     book_name = file_data['book_name']
     page_number = file_data['page_number']
     summary = file_data['summary']
+    doc_class = file_data['doc_class']
 
     new_row = {'vector': vector, 'book_name': book_name,
                'page_number': page_number, 'summary': summary,
+               'doc_class': doc_class,
                }
     
     df = df.append(new_row, ignore_index=True)
@@ -167,7 +190,7 @@ if __name__ == "__main__":
     else:
         all_books_vectors = vector
     
-    if len(df) > 5:
+    if len(df) > 4:
         
         kmeans = KMeans(n_clusters=number_of_clusters, random_state=42).fit(all_books_vectors)
         closest_indices = []
@@ -177,7 +200,7 @@ if __name__ == "__main__":
             closest_index = np.argmin(distances)
             closest_indices.append(closest_index)
        
-        tsne = TSNE(n_components=2, random_state=42,perplexity=5)
+        tsne = TSNE(n_components=2, random_state=42,perplexity=4)
         reduced_data_tsne = tsne.fit_transform(np.array(all_books_vectors))
         
     
