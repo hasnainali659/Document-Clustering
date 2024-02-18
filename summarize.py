@@ -7,7 +7,6 @@ from langchain.chains.summarize import load_summarize_chain
 from sklearn.cluster import KMeans
 from sklearn.manifold import TSNE
 import matplotlib.pyplot as plt
-import warnings
 from warnings import simplefilter
 from dotenv import load_dotenv
 from langchain.prompts import PromptTemplate
@@ -137,41 +136,52 @@ class BookSummarizer:
         doc_class = chain.invoke({'summary': summary})
         return doc_class.content
     
-def process_single_file(file_path):
-    summarizer = BookSummarizer(pdf_path=file_path, num_clusters=3)
-    output = summarizer.run_pipeline()
-    vector = summarizer.summary_embeddings(output)[0]
-    doc_class = summarizer.document_classification(output)
+    def process_single_file(self):
+        output = self.run_pipeline()
+        vector = self.summary_embeddings(output)[0]
+        doc_class = self.document_classification(output)
 
-    return {
-        'book_name': os.path.basename(file_path),
-        'vector': vector,
-        'page_number': summarizer.book_page_number,
-        'summary': output,
-        'doc_class': doc_class
-    }
+        return {
+            'book_name': os.path.basename(self.pdf_path),
+            'vector': vector,
+            'page_number': self.book_page_number,
+            'summary': output,
+            'doc_class': doc_class
+        }
     
+
+def create_csv(csv_path):
+    columns = ['vector', 'x', 'y', 'book_name', 'page_number', 'summary', 'labels', 'doc_class']
+    df = pd.DataFrame(columns=columns)
+    df.to_csv(csv_path, index=False)
+
+def reduce_data_tsne(all_books_vectors):
+    kmeans = KMeans(n_clusters=number_of_clusters, random_state=42).fit(all_books_vectors)
+    tsne = TSNE(n_components=2, random_state=42,perplexity=4)
+    reduced_data_tsne = tsne.fit_transform(np.array(all_books_vectors))
+
+    x = reduced_data_tsne[:, 0]
+    y = reduced_data_tsne[:, 1]
+    labels = kmeans.labels_
+
+    return x, y, labels
+
 if __name__ == "__main__":
     
     filename = "docs_copy/ros.pdf"
-    data = "books.csv"
+    csv_path = "books.csv"
     number_of_clusters = 3
     reduced_data_tsne = None
     kmeans = None
 
-    if not os.path.exists(data):
-        columns = ['vector', 'x', 'y', 'book_name', 'page_number', 'summary', 'labels', 'doc_class']
-        df = pd.DataFrame(columns=columns)
-        df.to_csv(data, index=False)
+    if not os.path.exists(csv_path):
+        create_csv(csv_path)
     
-    df = pd.read_csv(data)
-    file_data = process_single_file(filename)
+    df = pd.read_csv(csv_path)
 
-    vector = file_data['vector']
-    book_name = file_data['book_name']
-    page_number = file_data['page_number']
-    summary = file_data['summary']
-    doc_class = file_data['doc_class']
+    summarizer = BookSummarizer(filename, number_of_clusters)
+    file_data = summarizer.process_single_file()
+    book_name, vector, page_number, summary, doc_class = file_data.values()
 
     new_row = {'vector': vector, 'book_name': book_name,
                'page_number': page_number, 'summary': summary,
@@ -179,9 +189,9 @@ if __name__ == "__main__":
                }
     
     df = df.append(new_row, ignore_index=True)
-    df.to_csv(data, index=False)
+    df.to_csv(csv_path, index=False)
 
-    df = pd.read_csv(data)
+    df = pd.read_csv(csv_path)
     
     if len(df) > 1:
         df['vector'] = df['vector'].apply(ast.literal_eval)
@@ -192,25 +202,10 @@ if __name__ == "__main__":
     
     if len(df) > 4:
         
-        kmeans = KMeans(n_clusters=number_of_clusters, random_state=42).fit(all_books_vectors)
-        closest_indices = []
-
-        for i in range(number_of_clusters):
-            distances = np.linalg.norm(all_books_vectors - kmeans.cluster_centers_[i], axis=1)
-            closest_index = np.argmin(distances)
-            closest_indices.append(closest_index)
-       
-        tsne = TSNE(n_components=2, random_state=42,perplexity=4)
-        reduced_data_tsne = tsne.fit_transform(np.array(all_books_vectors))
-        
-    
-    if reduced_data_tsne is not None:
-        x = reduced_data_tsne[:, 0]
-        y = reduced_data_tsne[:, 1]
-        labels = kmeans.labels_
+        x, y, labels = reduce_data_tsne(all_books_vectors)
 
         df['x'] = x
         df['y'] = y
         df['labels'] = labels
 
-    df.to_csv(data, index=False)
+    df.to_csv(csv_path, index=False)
