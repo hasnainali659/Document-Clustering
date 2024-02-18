@@ -4,16 +4,23 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain.prompts import ChatPromptTemplate
 from langchain.chains.summarize import load_summarize_chain
+
 from sklearn.cluster import KMeans
 from sklearn.manifold import TSNE
+
 import matplotlib.pyplot as plt
+
 from warnings import simplefilter
+
 from dotenv import load_dotenv
+
 from langchain.prompts import PromptTemplate
+
 import numpy as np
 import os
 import pandas as pd
 import ast
+
 
 class BookSummarizer:
     def __init__(self, pdf_path, num_clusters=10):
